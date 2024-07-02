@@ -1,11 +1,45 @@
-line 1
-line 2 
-line 3
-line 4
-line 5
-line 6
-line 7 
-line 8
-line 9
-line 10
-line 12
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE_NAME = 'francisgrane/myweb:latest'
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main', url: 'https://github.com/francisgrane/index.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t ${DOCKER_IMAGE_NAME} .'
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                    sh 'docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD'
+                }
+                sh 'docker push ${DOCKER_IMAGE_NAME}'
+            }
+        }
+
+        stage('Deploy Docker Container') {
+            steps {
+                script {
+                    // Check if the container is running and remove it if it exists
+                    def containerExists = sh(script: "docker ps -a -q -f name=tomcattest", returnStdout: true).trim()
+                    if (containerExists) {
+                        sh 'docker stop tomcattest'
+                        sh 'docker rm tomcattest'
+                    }
+                    // Run the new container
+                    sh 'docker run -itd -p 8090:80 --name tomcattest ${DOCKER_IMAGE_NAME}'
+                }
+            }
+        }
+    }
+}
